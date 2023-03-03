@@ -1,0 +1,122 @@
+#include <FirebaseESP8266.h>
+#include <ESP8266WiFi.h>
+#include <Servo.h>
+#include <OneWire.h>
+#include <DallasTemperature.h>
+
+#define WIFI_SSID "TECNO SPARK 6 Go"
+#define WIFI_PASSWORD "f1a4db117f61"
+
+
+// definir URL de BASE DE DATOS
+#define FIREBASE_HOST "https://usuariosproduccionleche-default-rtdb.firebaseio.com/"
+#define FIREBASE_AUTH "PN8t10dSfOsA82gknD6SubjGJlwiHkXHxIqSpN9l"
+
+///////     PIN ////////////////////
+int pinMotor = D2;
+#define ONE_WIRE_BUS 0
+
+OneWire oneWire(ONE_WIRE_BUS);
+DallasTemperature sensors(&oneWire);
+
+Servo myServo;
+
+
+//Definir pines
+
+// Definir Base de datos
+FirebaseData fbdo;
+
+
+String nodo = "Estado";
+String lit = "LitrosUsuario";
+String tem = "Temperatura";
+String dato;
+
+
+
+void setup() {
+  Serial.begin(115200);
+
+  sensors.begin(); ////
+  myServo.attach(pinMotor); // conectar el servo al pin D1
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  delay (2000);
+  Serial.println();
+  Serial.println("Conectando a Red Wifi");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(500);
+  }
+  Serial.println();
+  Serial.print("Conexion Exitosa IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
+
+
+  // Conexion a Firebase
+  Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
+  Firebase.reconnectWiFi (true);
+}
+
+
+void loop() {
+  puerta();
+  temp();
+
+}
+
+////////////////////// Metodo del servoMotor  ///////////////////////////
+int sensor;
+
+void puerta() {
+  if (Firebase.getString(fbdo, nodo + "/Servo")) {
+    dato = fbdo.stringData();
+  }
+  if (dato == "1") {
+    myServo.write(100);
+
+    sensor = analogRead(A0);
+    float mililitros = (2000 / 1024) * sensor;
+    float litros = mililitros / 1000;
+    float total = litros;
+    if (total > 0) {
+      Serial.print(total );
+      Serial.print(" Litros ");
+      Serial.println();
+      Firebase.setString(fbdo, lit + "/Litros", total);
+      delay(2000);
+    } else {
+      Serial.println("0");
+      Firebase.setString(fbdo, lit + "/Litros", 0);
+      delay(2000);
+    }
+
+  } else if (dato == "0") {
+    myServo.write(0);
+  }
+
+}
+
+
+////////////// TEMPERATURA ////////////
+
+
+void temp () {
+  sensors.requestTemperatures();
+
+  //Imprimir en Celsius
+  Serial.print("Temperatura en Celcius y Fahrenheit: ");
+  Serial.print(sensors.getTempCByIndex(0));
+  Firebase.setString(fbdo, tem + "/Celsius", sensors.getTempCByIndex(0));
+  Serial.print("C  |  ");
+
+  //Imprimir en Fahrenheit
+  Serial.print((sensors.getTempCByIndex(0) * 9.0) / 5.0 + 32.0);
+  Firebase.setString(fbdo, tem + "/Fahrenheit", (sensors.getTempCByIndex(0) * 9.0) / 5.0 + 32.0);
+  Serial.println("F");
+
+  delay(2000);
+}
